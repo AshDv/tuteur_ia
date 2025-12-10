@@ -38,10 +38,10 @@ class ConversationAgent:
                 "role": role,
                 "content": content,
             })
-    
+
     def get_history(self):
         return self.history
-    
+
     def get_cleaned_api_history(self, include_multimodal_content=False, current_multimodal_content=None):
         messages_to_send = copy.deepcopy(self.history)
         
@@ -65,7 +65,7 @@ class ConversationAgent:
                 pass
 
         return messages_to_send
-    
+
     def ask_llm(self, user_interaction, model):
 
         self.update_history(role="user", content=user_interaction)
@@ -83,7 +83,7 @@ class ConversationAgent:
         self.update_history(role="assistant", content=assistant_content)
 
         return response
-    
+
     def ask_vision_model(self, user_interaction, image_b64, mime_type, image_url_for_display):
 
         multimodal_content_api = [
@@ -115,8 +115,8 @@ class ConversationAgent:
         self.update_history(role="assistant", content=response)
 
         return response
-    
-    def generate_quiz(self, topic, n_questions=5, model="llama3-70b-8192"):
+
+    def generate_quiz(self, topic, n_questions, model):
         
         prompt_quiz = f"""
         Génère un quiz de {n_questions} questions sur le sujet '{topic}'. 
@@ -162,8 +162,8 @@ class ConversationAgent:
         except Exception as e:
             print(f"Erreur lors de l'appel à l'API Groq : {e}")
             return False
-        
-    def evaluate_and_get_feedback(self, question_data: dict, user_answer: str, model="llama3-70b-8192"):
+
+    def evaluate_and_get_feedback(self, question_data: dict, user_answer: str, model):
     
         q_type = question_data['type']
         correct_identifier = question_data['correct_identifier']

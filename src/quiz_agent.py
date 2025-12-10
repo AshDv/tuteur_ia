@@ -23,14 +23,12 @@ class QuizAgent:
         if self.result_key not in streamlite.session_state:
             streamlite.session_state[self.result_key] = []
 
-
     def create_quiz(self, quiz_data: list):
         streamlite.session_state[self.quiz_data_key] = quiz_data
         streamlite.session_state[self.quiz_state_key] = 'questioning'
         streamlite.session_state[self.current_step_key] = 0
         streamlite.session_state[self.score_key] = 0
         streamlite.session_state[self.result_key] = []
-
 
     def read_current_question(self) -> dict:
         step = streamlite.session_state.get(self.current_step_key, 0)
@@ -39,20 +37,19 @@ class QuizAgent:
         if 0 <= step < len(quiz_data):
             return quiz_data[step]
         return {}
-    
+
     def read_state(self) -> str:
         return streamlite.session_state[self.quiz_state_key]
-    
+
     def read_score(self) -> int:
         return streamlite.session_state[self.score_key]
-    
+
     def read_results(self) -> list:
         return streamlite.session_state[self.result_key]
-    
+
     def read_quiz_length(self) -> int:
         return len(streamlite.session_state[self.quiz_data_key])
 
-    
     def set_state(self, new_state: str):
         streamlite.session_state[self.quiz_state_key] = new_state
 
@@ -75,7 +72,6 @@ class QuizAgent:
             self.set_state('questioning')
         else:
             self.set_state('finished')
-            
 
     def delete_quiz(self):
         for key in [self.quiz_data_key, self.current_step_key, self.score_key, 
