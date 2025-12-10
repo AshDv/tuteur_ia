@@ -84,7 +84,7 @@ class ConversationAgent:
 
         return response
 
-    def ask_vision_model(self, user_interaction, image_b64, mime_type, image_url_for_display):
+    def ask_vision_model(self, user_interaction, image_b64, mime_type, image_url_for_display, model):
 
         multimodal_content_api = [
             {"type": "text", "text": user_interaction},
@@ -109,7 +109,7 @@ class ConversationAgent:
 
         response = self.client.chat.completions.create(
             messages=messages_to_send,
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            model=model,
         ).choices[0].message.content
 
         self.update_history(role="assistant", content=response)
@@ -217,6 +217,12 @@ class ConversationAgent:
                 return json.loads(raw_response)
             
             except json.JSONDecodeError:
-                return {f"Erreur de décodage JSON. Réponse brute: {raw_response[:200]}"}
+                return {
+                    "score": 0, 
+                    "feedback": f"Maître Splinter : Le format de correction est rompu. Reprends ta pratique, jeune élève. (Détails: {raw_response[:50]}...)"
+                }
             except Exception as e:
-                return {f"Erreur lors de l'appel à l'API Groq : {e}"}
+                return {
+                    "score": 0, 
+                    "feedback": f"Maître Splinter : Une erreur API est survenue. Méditez sur la discipline du code. Détails: {e}"
+                }
