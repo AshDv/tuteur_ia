@@ -9,6 +9,8 @@ from utils import DocumentProcessor
 
 current_dir = os.path.dirname(__file__)
 project_root = os.path.abspath(os.path.join(current_dir, '..'))
+context_text = ""
+difficulty = ""
 
 if project_root not in sys.path:
     sys.path.append(project_root)
@@ -53,12 +55,12 @@ def render_start_interface(agent: ConversationAgent, quiz_manager: QuizAgent):
     
     st.markdown("### Configuration du Quiz")
     
-    c1, c2, c3 = st.columns([3, 1, 1])
+    c1, c2, c3, c4 = st.columns([3, 1, 1, 1])
     with c1:
         topic = st.text_input("Sujet de l'évaluation", value=default_topic, 
                             placeholder="Ex: La Révolution Française")
     with c2:
-        num_questions = st.slider("Nb Questions", 1, 10, 3)
+        num_questions = st.slider("Nb Questions", 1, 20, 3)
     with c3:
         st.session_state.selected_model = st.selectbox(
             "Modèle", 
@@ -66,7 +68,8 @@ def render_start_interface(agent: ConversationAgent, quiz_manager: QuizAgent):
             index=0,
             key='llm_select_quiz'
         )
-    
+    with c4:
+        difficulty = st.selectbox("Niveau", ["Débutant", "Moyen", "Expert"])
     
     if st.button("🚀 Générer l'évaluation") and topic:
         quiz_manager.set_state('generating')
@@ -370,11 +373,12 @@ def run_app():
                 num_questions = st.session_state.get('num_questions', 3)
                 
                 # Assurez-vous que le sujet, nb questions et modèle sont passés correctement
-                success = agent.generate_quiz(
+                success = st.session_state.conversation_agent.generate_quiz(
                     topic=topic_input, 
                     n_questions=num_questions, 
                     model=model_id,
-                    
+                    context_instruction=context_text,
+                    difficulty=difficulty
                 )
                 
                 if not success:
