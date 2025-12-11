@@ -194,7 +194,7 @@ def render_chat_input(conversation_agent: ConversationAgent):
                 response = conversation_agent.ask_vision_model(
                     user_interaction=user_input,
                     images_data=images_data, # On passe la liste complète
-                    model=vision_model
+                    model=VISION_MODEL
                 )
             else:
                 response = conversation_agent.ask_llm(
