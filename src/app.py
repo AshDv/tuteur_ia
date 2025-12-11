@@ -20,7 +20,7 @@ class ConversationAgent:
             raise ValueError("GROQ_KEY non trouvée dans les variables d'environnement.")
             
         self.client = Groq(api_key=api_key)
-        self.quiz_agent = quiz_agent # Injection de dépendance
+        self.quiz_agent = quiz_agent
         
         self.initiate_history()
 
@@ -39,18 +39,16 @@ class ConversationAgent:
         }
         
         try:
-            response = requests.get(url, headers=headers, timeout=10) # Timeout pour la sécurité
-            response.raise_for_status() # Lève une exception pour les codes d'erreur HTTP
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
             
             data = response.json()
             
-            # Filtre et formatage pour Streamlit
             model_names = [model['id'] for model in data['data'] if model['id'].startswith(('llama', 'mixtral'))]
             return model_names
             
         except requests.exceptions.RequestException as e:
             print(f"Erreur lors de la récupération des modèles Groq: {e}")
-            # Modèles par défaut en cas d'échec de l'API
             return ["llama3-70b-8192", "mixtral-8x7b-8192"]
 
     @staticmethod
@@ -70,8 +68,6 @@ class ConversationAgent:
                 "content": system_content
             }
         ]
-
-    # --- Gestion de l'Historique ---
 
     def update_history(self, role, content, image_url=None):
         """Ajoute un message à l'historique persistant (pour l'affichage)."""
@@ -97,27 +93,21 @@ class ConversationAgent:
         
         for message in messages_to_send:
             
-            # 1. Suppression de la clé d'affichage non standard Groq
             if "image_url" in message:
                 del message["image_url"]
 
-            # 2. Simplification des anciens messages multimodaux (si le 'content' est une liste)
             if isinstance(message.get("content"), list):
                 try:
-                    # Extrait seulement la partie textuelle du contenu multimodal
                     text_content = next(item['text'] for item in message['content'] if item['type'] == 'text')
                     message['content'] = text_content
                 except (StopIteration, KeyError):
                     message['content'] = ""
 
-        # 3. Injection du contenu multimodal actuel (uniquement pour l'agent vision)
         if include_multimodal_content and current_multimodal_content is not None:
             if messages_to_send[-1]["role"] == "user":
                 messages_to_send[-1]["content"] = current_multimodal_content
         
         return messages_to_send
-
-    # --- Logique d'Exécution ---
 
     def ask_llm(self, user_interaction, model, context_text=""):
         teacher_context = self.read_file(self.TEACHER_CONTEXT_PATH)
@@ -181,9 +171,6 @@ class ConversationAgent:
             self.update_history(role="assistant", content=error_msg)
             return error_msg
 
-
-    # --- Logique de Quiz ---
-
     def generate_quiz(self, topic, n_questions, model, difficulty, context_instruction):
         
         prompt_quiz = f"""
@@ -225,34 +212,26 @@ class ConversationAgent:
                     model=model, 
                 ).choices[0].message.content
                 
-                # Nettoyage JSON des balises de code
                 if raw_response.strip().startswith("```json"):
                     raw_response = raw_response.strip().strip("```json").strip("```").strip()
 
                 quiz_data = json.loads(raw_response)
                 
-                # 3. Stockage des questions via le QuizAgent
                 self.quiz_agent.create_quiz(quiz_data) 
                 
-                return True # Succès
+                return True
                 
         except json.JSONDecodeError as e:
-            # AJOUT DU LOG CONSOLE ici
             error_message = f"Erreur de décodage JSON: Le LLM n'a pas retourné un format valide. L'API a probablement dévié du JSON. Détails: {e}. Réponse brute reçue: {raw_response[:200]}..."
             print(f"[LOG CONSOLE - QUIZ GENERATION ERROR] {error_message}")
             return error_message
         
         except Exception as e:
-            # AJOUT DU LOG CONSOLE ici
             error_message = f"Erreur API/Réseau: Échec de la connexion à Groq ou erreur interne. Détails: {e}"
             print(f"[LOG CONSOLE - QUIZ GENERATION ERROR] {error_message}")
             return error_message
 
     def get_correction_for_final_review(self, question_data: dict, user_answer: str, model="llama3-70b-8192"):
-        """
-        Évalue la réponse de l'étudiant à la fin du quiz, en utilisant l'IA pour les questions ouvertes.
-        Retourne un dictionnaire {"score": int, "feedback": str}.
-        """
         
         q_type = question_data['type']
         correct_identifier = question_data['correct_identifier']
@@ -300,7 +279,6 @@ class ConversationAgent:
                     model=model,
                 ).choices[0].message.content
                 
-                # Nettoyage JSON
                 if raw_response.strip().startswith("```json"):
                     raw_response = raw_response.strip().strip("```json").strip("```").strip()
 

@@ -74,8 +74,6 @@ class QuizAgent:
     def read_quiz_length(self) -> int:
         """[READ] Retourne le nombre total de questions."""
         return len(streamlit.session_state[self.quiz_data_key])
-
-    # --- Logique de Flux (Update) ---
     
     def set_state(self, new_state: str):
         """Définit la phase du quiz (ex: 'generating')."""
@@ -85,25 +83,21 @@ class QuizAgent:
         """Enregistre la réponse de l'utilisateur et passe à l'étape suivante (sans corriger)."""
         current_q_data = self.read_current_question()
         
-        # Stocke l'objet question et la réponse utilisateur pour la correction future
         result_log = {
             'question_data': current_q_data,
             'user_answer': user_answer,
-            'correction': None # La correction est différée
+            'correction': None
         }
         
         streamlit.session_state[self.result_key].append(result_log)
         
-        # Passe à la question suivante (ou à la fin)
         self.update_next_step()
 
     def update_next_step(self):
-        """Passe à la question suivante ou passe en revue finale."""
         if streamlit.session_state[self.current_step_key] < self.read_quiz_length() - 1:
             streamlit.session_state[self.current_step_key] += 1
             self.set_state('questioning')
         else:
-            # Fin du quiz, passe à l'état de correction finale
             self.set_state('final_review') 
 
     def finalize_quiz_results(self, conversation_agent: 'ConversationAgent', model: str):
@@ -112,7 +106,7 @@ class QuizAgent:
         (Nécessite l'instance de ConversationAgent pour l'appel LLM)
         """
         
-        streamlit.session_state[self.score_key] = 0 # Calculer le score final
+        streamlit.session_state[self.score_key] = 0
         
         final_results = []
         
@@ -120,23 +114,18 @@ class QuizAgent:
             q_data = result['question_data']
             user_answer = result['user_answer']
             
-            # Appel de la méthode de correction dans ConversationAgent
-            # (get_correction_for_final_review doit être implémentée dans ConversationAgent)
             correction = conversation_agent.get_correction_for_final_review(
                 question_data=q_data, 
                 user_answer=user_answer, 
                 model=model
             )
             
-            # Mise à jour du score et enregistrement de la correction
             streamlit.session_state[self.score_key] += correction['score']
             result['correction'] = correction
             final_results.append(result)
             
         streamlit.session_state[self.result_key] = final_results
-        self.set_state('finished') # Passe à l'état d'affichage des résultats finaux
-
-    # --- CRUD (Delete / Réinitialisation) ---
+        self.set_state('finished')
 
     def delete_quiz(self):
         """[DELETE] Réinitialise toutes les variables de session liées au quiz."""
