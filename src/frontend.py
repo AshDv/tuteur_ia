@@ -254,36 +254,46 @@ def run_app():
         # ... (image, titre)
         st.title("📚 Outils d'Entraînement")
         
-        # 1. Upload PDF (GESTION MULTIPLE)
-        # 💡 Changement 1 : Utilisation de accept_multiple_files=True
         uploaded_pdf_list = st.file_uploader(
             "Fichiers PDF (Cours - Max. 5)", 
             type="pdf", 
             key="pdf_uploader",
-            accept_multiple_files=True # Permet de charger plusieurs fichiers
+            accept_multiple_files=True
         )
         
-        # Logique de lecture des PDF (à adapter)
-        if uploaded_pdf_list and not st.session_state.course_text_content:
+        # Logique de lecture des PDF
+        if uploaded_pdf_list:
             
             # Limiter à 5 fichiers
-            if len(uploaded_pdf_list) > 5:
-                st.warning("Seuls les 5 premiers fichiers seront traités.")
-                uploaded_pdf_list = uploaded_pdf_list[:5]
+            uploaded_pdf_list = uploaded_pdf_list[:5]
+            
+            # 🛑 Réinitialisation avant de commencer la lecture
+            st.session_state.course_text_content = ""
             
             with st.spinner(f"Analyse de {len(uploaded_pdf_list)} documents..."):
-                all_text = []
+                
+                all_text_with_names = []
                 total_chars = 0
+                
                 for pdf_file in uploaded_pdf_list:
+                    # Extraction du texte
                     text = DocumentProcessor.extract_text_from_pdf(pdf_file)
-                    all_text.append(text)
+                    
+                    # 💡 Utilisation de l'implémentation améliorée (avec le nom de fichier)
+                    separator_and_text = f"\n--- Fichier : {pdf_file.name} ---\n{text}"
+                    all_text_with_names.append(separator_and_text)
                     total_chars += len(text)
                 
-                # Concaténer tout le contenu du cours
-                st.session_state.course_text_content = "\n\n--- NOUVEAU DOCUMENT ---\n\n".join(all_text)
+                # Concaténer tout le contenu dans la session state
+                st.session_state.course_text_content = "\n".join(all_text_with_names)
                 
-                st.success(f"{len(uploaded_pdf_list)} PDF(s) chargé(s) ! ({total_chars} car.)")
-
+                st.success(f"{len(uploaded_pdf_list)} PDF(s) chargés en mémoire !")
+                st.caption(f"Total : {total_chars} caractères.")
+        
+        # Si la liste est vide (l'utilisateur a retiré les fichiers), on vide la session state
+        elif 'course_text_content' in st.session_state:
+            st.session_state.course_text_content = ""
+        
         st.divider()
 
         # 2. Upload Image (GESTION MULTIPLE JUSQU'À 5)
@@ -363,7 +373,8 @@ def run_app():
                 success = agent.generate_quiz(
                     topic=topic_input, 
                     n_questions=num_questions, 
-                    model=model_id
+                    model=model_id,
+                    
                 )
                 
                 if not success:

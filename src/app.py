@@ -184,21 +184,30 @@ class ConversationAgent:
 
     # --- Logique de Quiz ---
 
-    def generate_quiz(self, topic, n_questions=5, model="llama3-70b-8192"):
+    def generate_quiz(self, topic, n_questions, model, difficulty, context_instruction):
         
         prompt_quiz = f"""
-        Génère un quiz de {n_questions} questions sur le sujet '{topic}'. 
-        Le quiz doit être un mélange des deux types : 'open' (réponse rédigée) et 'qcm' (question à choix multiples).
-
-        Le format de sortie DOIT être un tableau JSON (liste Python) sans aucun texte explicatif avant ou après. Chaque objet du tableau doit avoir les clés suivantes :
-        1. "type": ('open' ou 'qcm').
-        2. "question": (string).
-        3. "explanation": (string, explication pédagogique complète pour la correction).
-        4. "correct_identifier": (string. Pour 'open', c'est la réponse détaillée attendue. Pour 'qcm', c'est la lettre correcte, ex: 'B').
-
-        SI le type est 'qcm', ajoute la clé supplémentaire :
-        5. "choices": (array de 4 strings pour les options A, B, C, D).
-        """
+            Tu es un professeur expert. Sujet : "{topic}". Niveau : {difficulty}.
+            Objectif : Générer EXACTEMENT {n_questions} questions.
+            {context_instruction}
+            
+            INSTRUCTIONS :
+            Génère {n_questions} questions variées ('open' et 'qcm').
+            Si le texte est court, interroge sur des détails précis.
+            
+            Réponds UNIQUEMENT avec un tableau JSON valide (liste d'objets) respectant le schéma imposé dans le prompt système. 
+            
+            Exemple de format JSON STRICTEMENT requis pour la clé "questions" du tableau :
+            [
+                {{
+                    "type": "qcm",
+                    "question": "L'énoncé ?",
+                    "explanation": "Pourquoi c'est juste",
+                    "correct_identifier": "A",
+                    "choices": ["A. Option 1", "B. Option 2", "C. Option 3", "D. Option 4"]
+                }}
+            ]
+            """
         
         try:
             quiz_context = self.read_file(self.QUIZ_CONTEXT_PATH)
@@ -211,23 +220,33 @@ class ConversationAgent:
         ]
         
         try:
-            raw_response = self.client.chat.completions.create(
-                messages=messages_to_send,
-                model=model, 
-            ).choices[0].message.content
-            
-            if raw_response.strip().startswith("```json"):
-                raw_response = raw_response.strip().strip("```json").strip("```").strip()
+                raw_response = self.client.chat.completions.create(
+                    messages=messages_to_send,
+                    model=model, 
+                ).choices[0].message.content
+                
+                # Nettoyage JSON des balises de code
+                if raw_response.strip().startswith("```json"):
+                    raw_response = raw_response.strip().strip("```json").strip("```").strip()
 
-            quiz_data = json.loads(raw_response)
-            
-            self.quiz_agent.create_quiz(quiz_data) 
-            
-            return True
-            
-        except (json.JSONDecodeError, Exception) as e:
-            print(f"Erreur de génération/parsing du quiz: {e}")
-            return False 
+                quiz_data = json.loads(raw_response)
+                
+                # 3. Stockage des questions via le QuizAgent
+                self.quiz_agent.create_quiz(quiz_data) 
+                
+                return True # Succès
+                
+        except json.JSONDecodeError as e:
+            # AJOUT DU LOG CONSOLE ici
+            error_message = f"Erreur de décodage JSON: Le LLM n'a pas retourné un format valide. L'API a probablement dévié du JSON. Détails: {e}. Réponse brute reçue: {raw_response[:200]}..."
+            print(f"[LOG CONSOLE - QUIZ GENERATION ERROR] {error_message}")
+            return error_message
+        
+        except Exception as e:
+            # AJOUT DU LOG CONSOLE ici
+            error_message = f"Erreur API/Réseau: Échec de la connexion à Groq ou erreur interne. Détails: {e}"
+            print(f"[LOG CONSOLE - QUIZ GENERATION ERROR] {error_message}")
+            return error_message
 
     def get_correction_for_final_review(self, question_data: dict, user_answer: str, model="llama3-70b-8192"):
         """

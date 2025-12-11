@@ -12,15 +12,15 @@ class QuizAgent:
     current_step_key = 'current_step'
     score_key = 'score'
     result_key = 'results'
-    QUIZ_STATE_KEY = 'quiz_state'
+    quiz_state_key = 'quiz_state'
 
     def __init__(self):
         """Initialise l'état du quiz dans st.session_state si nécessaire."""
         
         # Initialisation de la phase de l'application
-        if self.QUIZ_STATE_KEY not in streamlit.session_state:
+        if self.quiz_state_key not in streamlit.session_state:
             # Phases: 'start', 'generating', 'questioning', 'final_review', 'finished'
-            streamlit.session_state[self.QUIZ_STATE_KEY] = 'start' 
+            streamlit.session_state[self.quiz_state_key] = 'start' 
             
         # Initialisation des données
         if self.quiz_data_key not in streamlit.session_state:
@@ -39,7 +39,7 @@ class QuizAgent:
         [CREATE] Stocke les données du quiz générées par le LLM et initialise les variables.
         """
         streamlit.session_state[self.quiz_data_key] = quiz_data
-        streamlit.session_state[self.QUIZ_STATE_KEY] = 'questioning'
+        streamlit.session_state[self.quiz_state_key] = 'questioning'
         streamlit.session_state[self.current_step_key] = 0
         streamlit.session_state[self.score_key] = 0
         streamlit.session_state[self.result_key] = []
@@ -61,7 +61,7 @@ class QuizAgent:
     
     def read_state(self) -> str:
         """[READ] Retourne la phase actuelle du quiz."""
-        return streamlit.session_state[self.QUIZ_STATE_KEY]
+        return streamlit.session_state[self.quiz_state_key]
     
     def read_score(self) -> int:
         """[READ] Retourne le score actuel."""
@@ -79,7 +79,7 @@ class QuizAgent:
     
     def set_state(self, new_state: str):
         """Définit la phase du quiz (ex: 'generating')."""
-        streamlit.session_state[self.QUIZ_STATE_KEY] = new_state
+        streamlit.session_state[self.quiz_state_key] = new_state
 
     def record_answer_and_advance(self, user_answer):
         """Enregistre la réponse de l'utilisateur et passe à l'étape suivante (sans corriger)."""
@@ -141,6 +141,6 @@ class QuizAgent:
     def delete_quiz(self):
         """[DELETE] Réinitialise toutes les variables de session liées au quiz."""
         for key in [self.quiz_data_key, self.current_step_key, self.score_key, 
-                    self.result_key, self.QUIZ_STATE_KEY]:
+                    self.result_key, self.quiz_state_key]:
             if key in streamlit.session_state:
                 del streamlit.session_state[key]
