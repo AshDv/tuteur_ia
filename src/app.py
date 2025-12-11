@@ -264,25 +264,33 @@ class ConversationAgent:
         else:
             
             prompt_correction = f"""
-            TACHE : En tant que Maître Splinter, évalue la réponse de l'étudiant.
-            Réponse attendue (Référence pour la notation) : '{correct_identifier}'
-            Réponse de l'étudiant : '{user_answer}'
-            
-            [Explication détaillée fournie si besoin : {explanation}]
-            
-            RÈGLE DE NOTATION :
-            1. Décide si la réponse est CORRECTE (score 1) ou INCORRECTE (score 0).
-            2. Le 'feedback' doit être formulé avec le ton sage et pédagogique de Maître Splinter.
-            
-            FORMAT DE SORTIE OBLIGATOIRE :
-            Retourne UNIQUEMENT l'objet JSON suivant sans aucun texte supplémentaire :
-            {{"score": (int), "feedback": (string formulé par Maître Splinter)}}
-            """
+                TACHE : En tant que Maître Splinter, évalue la réponse de l'étudiant.
+                
+                Réponse attendue (Référence pour la notation) : '{correct_identifier}'
+                Réponse de l'étudiant : '{user_answer}'
+                
+                [Explication détaillée fournie si besoin : {explanation}]
+                
+                RÈGLE DE NOTATION :
+                1. Évalue l'exactitude CONCEPTUELLE de la réponse de l'étudiant par rapport à la réponse attendue.
+                2. Le score doit être soit 1 (CORRECT - réponse complète et précise), 0.5 (PARTIELLEMENT CORRECT - contient des éléments clés, mais incomplet ou vague), ou 0 (INCORRECT).
+                
+                RÈGLE DE NOTATION FORMELLE :
+                * Score 1: La réponse capture l'essence et les détails importants.
+                * Score 0.5: La réponse contient des éléments de vérité, mais manque de précision ou d'exhaustivité.
+                * Score 0: La réponse est incorrecte, hors sujet ou n'a pas réussi à identifier le concept principal.
+                
+                3. Le 'feedback' doit être formulé avec le ton sage et pédagogique de Maître Splinter.
+                
+                FORMAT DE SORTIE OBLIGATOIRE :
+                Retourne UNIQUEMENT l'objet JSON suivant sans aucun texte supplémentaire :
+                {{"score": (float, 0, 0.5, ou 1), "feedback": (string formulé par Maître Splinter)}}
+                """
 
             messages_to_send = [
-                {"role": "system", "content": teacher_context},
-                {"role": "user", "content": prompt_correction} 
-            ]
+                    {"role": "system", "content": teacher_context},
+                    {"role": "user", "content": prompt_correction} 
+                ]
 
             try:
                 raw_response = self.client.chat.completions.create(
