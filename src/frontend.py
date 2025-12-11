@@ -72,8 +72,13 @@ def render_start_interface(agent: ConversationAgent, quiz_manager: QuizAgent):
         difficulty = st.selectbox("Niveau", ["Débutant", "Moyen", "Expert"])
     
     if st.button("🚀 Générer l'évaluation") and topic:
+        
+        st.session_state['topic'] = topic
+        st.session_state['num_questions'] = num_questions
+        st.session_state['difficulty'] = difficulty
+        
         quiz_manager.set_state('generating')
-        st.rerun() # Recharger pour afficher le spinner
+        st.rerun()
 
 
 def render_questioning_interface(agent: ConversationAgent, quiz_manager: QuizAgent):
@@ -94,8 +99,7 @@ def render_questioning_interface(agent: ConversationAgent, quiz_manager: QuizAge
         # Logique de l'interface QCM vs OUVERTE
         if q_data['type'] == 'qcm':
             # Interface QCM : Radio buttons
-            choices_with_letters = [f"{chr(65 + i)}. {choice}" for i, choice in enumerate(q_data['choices'])]
-            
+            choices_with_letters = q_data['choices']          
             # Stocke la réponse complète (ex: "A. Choix 1")
             user_choice_with_letter = st.radio(
                 "Choisis ta réponse :",
@@ -371,6 +375,7 @@ def run_app():
                 model_id = st.session_state.selected_model
                 topic_input = st.session_state.get('topic', 'sujet libre')
                 num_questions = st.session_state.get('num_questions', 3)
+                context_text = st.session_state.course_text_content
                 
                 # Assurez-vous que le sujet, nb questions et modèle sont passés correctement
                 success = st.session_state.conversation_agent.generate_quiz(
