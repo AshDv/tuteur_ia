@@ -11,9 +11,8 @@ from quiz_agent import QuizAgent
 load_dotenv()
 class ConversationAgent:
     
-    BASE_PATH = os.path.dirname(__file__)
-    TEACHER_CONTEXT_PATH = os.path.join(BASE_PATH, '..', 'ressources', 'teacher_context.txt')
-    QUIZ_CONTEXT_PATH = os.path.join(BASE_PATH, '..', 'ressources', 'quiz_context.txt')
+    TEACHER_CONTEXT_PATH = os.path.join(os.path.dirname(__file__) + '/../resources/teacher_context.txt')
+    QUIZ_CONTEXT_PATH = os.path.join(os.path.dirname(__file__) + '/../resources/teacher_context.txt')
 
     def __init__(self, quiz_agent: QuizAgent):
         api_key = os.environ.get("GROQ_KEY")

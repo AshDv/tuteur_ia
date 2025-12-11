@@ -123,7 +123,7 @@ def render_final_review_interface(agent: ConversationAgent, quiz_manager: QuizAg
     """Déclenche la correction finale par le LLM et passe à l'affichage des résultats."""
     
     # Utilise le modèle sélectionné par l'utilisateur pour le quiz
-    model_id = LLM_MODELS[st.session_state.selected_model]
+    model_id = st.session_state.selected_model
     
     st.header("Correction en Cours...")
     st.info("Maître Splinter évalue la qualité de votre pratique. Cela peut prendre quelques instants pour les questions ouvertes.")
@@ -196,7 +196,7 @@ def render_chat_input(agent: ConversationAgent):
         
         # Récupération des données pour l'appel
         context_text = st.session_state.course_text_content
-        model_id = LLM_MODELS[st.session_state.selected_model]
+        model_id = st.session_state.selected_model
         image_url_full = None
         
         # Traitement de l'image si elle est présente
@@ -355,7 +355,7 @@ def run_app():
 
         elif current_state == 'generating':
             with st.spinner("Création du questionnaire par le Maître..."):
-                model_id = LLM_MODELS[st.session_state.selected_model]
+                model_id = st.session_state.selected_model
                 topic_input = st.session_state.get('topic', 'sujet libre')
                 num_questions = st.session_state.get('num_questions', 3)
                 
