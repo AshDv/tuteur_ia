@@ -3,6 +3,21 @@ from groq import Groq
 from dotenv import load_dotenv
 import os
 import json
+import PyPDF2
+
+# --- FONCTIONS UTILITAIRES ---
+def extract_text_from_pdf(pdf_file):
+    """Extrait le texte brut d'un fichier PDF uploadé"""
+    try:
+        pdf_reader = PyPDF2.PdfReader(pdf_file)
+        text = ""
+        for page in pdf_reader.pages:
+            content = page.extract_text()
+            if content:
+                text += content + "\n"
+        return text
+    except Exception as e:
+        return f"Erreur de lecture PDF : {e}"
 
 # --- BACKEND : Le Cerveau de Splinter ---
 class ConversationAgent:
@@ -14,11 +29,22 @@ class ConversationAgent:
             st.stop()
         self.client = Groq(api_key=api_key)
 
-    def generate_response(self, messages):
-        """Gère la conversation normale"""
+    def generate_response(self, messages, context_text=None):
+        if context_text:
+            system_message_content = (
+                "Tu es Splinter, un tuteur pédagogue. "
+                "Utilise le cours fourni ci-dessous pour répondre. "
+                "Si la réponse n'est pas dans le cours, utilise tes connaissances.\n\n"
+                f"--- COURS ---\n{context_text[:20000]}"
+            )
+            # On insère le contexte au début sans écraser l'historique complet
+            messages_with_context = [{"role": "system", "content": system_message_content}] + messages
+        else:
+            messages_with_context = messages
+
         try:
             chat_completion = self.client.chat.completions.create(
-                messages=messages,
+                messages=messages_with_context,
                 model="llama-3.3-70b-versatile",
                 temperature=0.7,
                 max_tokens=1024,
@@ -27,22 +53,22 @@ class ConversationAgent:
         except Exception as e:
             return f"Erreur : {e}"
 
-    def generate_quiz(self, topic, difficulty="Moyen"):
-        """Génère un quiz structuré en JSON"""
-        # On force l'IA à répondre en JSON strict pour pouvoir corriger automatiquement
-        prompt = f"""
-        Tu es un générateur de quiz éducatif. Génère un QCM de 5 questions sur le sujet : "{topic}".
-        Niveau : {difficulty}.
+    def generate_quiz(self, topic, difficulty="Moyen", context_text=None):
+        context_instruction = ""
+        if context_text:
+            context_instruction = f"IMPORTANT : Base tes questions EXCLUSIVEMENT sur le cours suivant :\n{context_text[:15000]}"
         
-        IMPORTANT : Ta réponse doit être UNIQUEMENT un objet JSON valide, sans texte avant ni après.
-        Voici le format exact attendu :
+        prompt = f"""
+        Génère un QCM de 5 questions sur : "{topic}". Niveau : {difficulty}.
+        {context_instruction}
+        Réponds UNIQUEMENT avec un JSON valide :
         {{
             "questions": [
                 {{
-                    "question": "L'énoncé de la question ?",
-                    "options": ["Choix A", "Choix B", "Choix C", "Choix D"],
-                    "correct_answer": "Choix B",
-                    "explanation": "Pourquoi c'est la bonne réponse."
+                    "question": "...",
+                    "options": ["A", "B", "C", "D"],
+                    "correct_answer": "...",
+                    "explanation": "..."
                 }}
             ]
         }}
@@ -51,121 +77,106 @@ class ConversationAgent:
             response = self.client.chat.completions.create(
                 messages=[{"role": "user", "content": prompt}],
                 model="llama-3.3-70b-versatile",
-                temperature=0.5, # Plus bas pour être plus rigoureux
-                response_format={"type": "json_object"} # Force le mode JSON
+                temperature=0.5,
+                response_format={"type": "json_object"}
             )
-            # On transforme le texte reçu en objet Python (Dictionnaire)
             return json.loads(response.choices[0].message.content)
         except Exception as e:
-            st.error(f"Erreur lors de la génération du quiz : {e}")
+            st.error(f"Erreur génération quiz : {e}")
             return None
 
 # --- FRONTEND : L'interface Streamlit ---
+st.set_page_config(page_title="Splinter - Tuteur IA", page_icon="🐭", layout="wide")
 
-st.set_page_config(page_title="Splinter - Tuteur IA", page_icon="🐭")
-st.title("🐭 Splinter - Ton Tuteur IA")
+# -- SIDEBAR --
+with st.sidebar:
+    st.image("https://img.icons8.com/dusk/64/000000/rat.png")
+    st.title("📚 Tes Cours")
+    uploaded_file = st.file_uploader("Fichier PDF", type="pdf")
+    
+    course_content = ""
+    if uploaded_file is not None:
+        with st.spinner("Lecture..."):
+            course_content = extract_text_from_pdf(uploaded_file)
+            st.success("Cours chargé !")
 
-# Création des onglets
-tab1, tab2 = st.tabs(["💬 Discussion", "📝 Quiz Interactif"])
+st.title("🐭 Splinter - Tuteur IA")
 
-# --- ONGLET 1 : CHAT ---
+tab1, tab2 = st.tabs(["💬 Discussion", "📝 Quiz"])
+
+# --- ONGLET 1 : CHAT (Corrigé) ---
 with tab1:
+    # Conteneur pour l'historique (S'affiche toujours au-dessus)
+    chat_container = st.container()
+    
     if "messages" not in st.session_state:
-        st.session_state.messages = [
-            {"role": "system", "content": "Tu es Splinter, un tuteur sage. Tu aides à réviser."}
-        ]
+        st.session_state.messages = []
 
-    for message in st.session_state.messages:
-        if message["role"] != "system":
+    # Affichage de l'historique
+    with chat_container:
+        if course_content and st.button("📑 Résumer ce cours"):
+            st.session_state.messages.append({"role": "user", "content": "Résume ce cours."})
+            st.rerun() # On recharge pour traiter la demande immédiatement
+
+        for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-    if prompt := st.chat_input("Pose ta question à Splinter..."):
-        with st.chat_message("user"):
-            st.markdown(prompt)
+    # Zone de saisie (Toujours en bas)
+    if prompt := st.chat_input("Pose ta question..."):
+        # 1. Sauvegarder la question de l'utilisateur
         st.session_state.messages.append({"role": "user", "content": prompt})
-
+        
+        # 2. Générer la réponse
         agent = ConversationAgent()
-        with st.chat_message("assistant"):
-            with st.spinner("Splinter réfléchit..."):
-                response = agent.generate_response(st.session_state.messages)
-                st.markdown(response)
+        response = agent.generate_response(st.session_state.messages, context_text=course_content)
+        
+        # 3. Sauvegarder la réponse
         st.session_state.messages.append({"role": "assistant", "content": response})
+        
+        # 4. RECHARGER LA PAGE (C'est la clé du fix !)
+        st.rerun()
 
 # --- ONGLET 2 : QUIZ ---
 with tab2:
     st.header("Mode Évaluation")
-    
-    # 1. Configuration du quiz
     col1, col2 = st.columns([3, 1])
     with col1:
-        topic = st.text_input("Sur quel sujet veux-tu être testé ?", placeholder="Ex: La Révolution Française, Python, La Photosynthèse...")
+        default_topic = "Le cours ci-joint" if course_content else ""
+        topic = st.text_input("Sujet", value=default_topic)
     with col2:
-        difficulty = st.selectbox("Difficulté", ["Débutant", "Moyen", "Expert"])
+        difficulty = st.selectbox("Niveau", ["Débutant", "Moyen", "Expert"])
 
-    # Bouton pour lancer la génération
     if st.button("Générer le Quiz") and topic:
         agent = ConversationAgent()
-        with st.spinner("Splinter prépare tes questions..."):
-            quiz_data = agent.generate_quiz(topic, difficulty)
+        with st.spinner("Génération..."):
+            quiz_data = agent.generate_quiz(topic, difficulty, context_text=course_content)
             if quiz_data:
-                # On sauvegarde le quiz dans la mémoire (session_state)
                 st.session_state.current_quiz = quiz_data
-                # On efface les réponses précédentes s'il y en avait
                 st.session_state.user_answers = {} 
                 st.session_state.quiz_submitted = False
+                st.rerun()
 
-    # 2. Affichage du quiz (s'il existe en mémoire)
     if "current_quiz" in st.session_state:
         quiz = st.session_state.current_quiz
-        
-        # Formulaire pour éviter que la page se recharge à chaque clic
         with st.form("quiz_form"):
             for i, q in enumerate(quiz["questions"]):
-                st.subheader(f"Question {i+1}")
-                st.write(q["question"])
-                
-                # Le widget radio pour les choix
-                # On utilise un key unique pour chaque question
-                choice = st.radio(
-                    "Ton choix :", 
-                    q["options"], 
-                    key=f"q_{i}", 
-                    index=None # Aucun choix sélectionné par défaut
-                )
+                st.subheader(f"Q{i+1}: {q['question']}")
+                st.radio("Réponse", q["options"], key=f"q_{i}", index=None)
             
-            submitted = st.form_submit_button("Valider mes réponses")
-            
-            if submitted:
+            if st.form_submit_button("Valider"):
                 st.session_state.quiz_submitted = True
+                st.rerun()
 
-        # 3. Correction et Note
         if st.session_state.get("quiz_submitted"):
-            score = 0
-            total = len(quiz["questions"])
-            
             st.divider()
-            st.markdown("### 📊 Résultats")
-            
+            score = 0
             for i, q in enumerate(quiz["questions"]):
                 user_choice = st.session_state.get(f"q_{i}")
-                correct = q["correct_answer"]
-                
-                if user_choice == correct:
+                if user_choice == q["correct_answer"]:
                     score += 1
-                    st.success(f"✅ **Question {i+1}** : Bravo ! (Réponse : {correct})")
+                    st.success(f"✅ Q{i+1} : Bravo !")
                 else:
-                    st.error(f"❌ **Question {i+1}** : Faux. Tu as mis '{user_choice}'.")
-                    st.info(f"👉 **La bonne réponse était** : {correct}\n\n💡 *Explication : {q['explanation']}*")
-            
-            # Affichage de la note finale
-            final_score = (score / total) * 20
-            st.markdown(f"## Note finale : {score}/{total} ({final_score:.1f}/20)")
-            
-            if final_score > 15:
-                st.balloons()
-                st.markdown("🏆 Excellent travail jeune padawan !")
-            elif final_score > 10:
-                st.markdown("👍 Pas mal, mais tu peux encore réviser.")
-            else:
-                st.markdown("📚 Il va falloir retourner étudier ce sujet !")
+                    st.error(f"❌ Q{i+1} : Faux. ({user_choice})")
+                    st.info(f"Réponse : {q['correct_answer']} | {q['explanation']}")
+            st.markdown(f"### Note : {score}/{len(quiz['questions'])}")
