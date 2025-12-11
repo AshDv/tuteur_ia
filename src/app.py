@@ -21,35 +21,7 @@ class ConversationAgent:
             
         self.client = Groq(api_key=api_key)
         self.quiz_agent = quiz_agent
-        
         self.initiate_history()
-
-    @streamlit.cache_data(ttl=3600)
-    def fetch_groq_models():
-        """Récupère la liste dynamique des modèles disponibles sur Groq."""
-        
-        api_key = os.environ.get("GROQ_KEY")
-        if not api_key:
-            return []
-
-        url = "https://api.groq.com/openai/v1/models"
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-        
-        try:
-            response = requests.get(url, headers=headers, timeout=10)
-            response.raise_for_status()
-            
-            data = response.json()
-            
-            model_names = [model['id'] for model in data['data'] if model['id'].startswith(('llama', 'mixtral'))]
-            return model_names
-            
-        except requests.exceptions.RequestException as e:
-            print(f"Erreur lors de la récupération des modèles Groq: {e}")
-            return ["llama3-70b-8192", "mixtral-8x7b-8192"]
 
     @staticmethod
     def read_file(file_path):
@@ -70,29 +42,18 @@ class ConversationAgent:
         ]
 
     def update_history(self, role, content, image_url=None):
-        """Ajoute un message à l'historique persistant (pour l'affichage)."""
         message_data = {"role": role, "content": content}
-        
         if image_url:
             message_data["image_url"] = image_url 
-            
         self.history.append(message_data)
         
     def get_history(self):
-        """Retourne l'historique complet (pour l'affichage)."""
         return self.history
 
     def get_cleaned_api_history(self, include_multimodal_content=False, current_multimodal_content=None):
-        """
-        Retourne une copie de l'historique nettoyée pour les appels d'API Groq:
-        1. Supprime la clé 'image_url'.
-        2. Simplifie les anciens messages multimodaux en texte pur.
-        3. Injecte le contenu multimodal pour le message actuel si demandé.
-        """
         messages_to_send = copy.deepcopy(self.history)
         
         for message in messages_to_send:
-            
             if "image_url" in message:
                 del message["image_url"]
 
@@ -116,7 +77,6 @@ class ConversationAgent:
         self.update_history(role="user", content=user_interaction)
         
         cleaned_messages = self.get_cleaned_api_history(include_multimodal_content=False)
-        
         cleaned_messages[0] = {"role": "system", "content": system_content}
 
         try:
@@ -125,25 +85,17 @@ class ConversationAgent:
                 model=model
             )
             assistant_content = response.choices[0].message.content
-            
             self.update_history(role="assistant", content=assistant_content)
             return assistant_content
-        
         except Exception as e:
             error_msg = f"❌ Maître Splinter : Une erreur API est survenue pendant la conversation : {e}"
             self.update_history(role="assistant", content=error_msg)
             return error_msg
 
     def ask_vision_model(self, user_interaction, images_data, model):
-        """
-        Gère la vision avec plusieurs images.
-        images_data : Liste de dictionnaires {'b64': str, 'mime': str, 'display_url': str}
-        """
 
-        # 1. On crée le bloc de texte
         multimodal_content_api = [{"type": "text", "text": user_interaction}]
 
-        # 2. On ajoute chaque image au message API
         for img in images_data:
             multimodal_content_api.append({
                 "type": "image_url",
@@ -152,8 +104,6 @@ class ConversationAgent:
                 },
             })
 
-        # 3. Mise à jour de l'historique local (pour l'affichage)
-        # On stocke la première image comme "aperçu" principal ou on gère différemment l'affichage
         first_display_url = images_data[0]['display_url'] if images_data else None
         
         self.update_history(
@@ -162,7 +112,6 @@ class ConversationAgent:
             image_url=first_display_url 
         )
         
-        # 4. Préparation de l'envoi API
         messages_to_send = self.get_cleaned_api_history(
             include_multimodal_content=True,
             current_multimodal_content=multimodal_content_api
@@ -173,10 +122,8 @@ class ConversationAgent:
                 messages=messages_to_send,
                 model=model,
             ).choices[0].message.content
-            
             self.update_history(role="assistant", content=response)
             return response
-        
         except Exception as e:
             error_msg = f"❌ Maître Splinter : Erreur de vision (API) : {e}"
             self.update_history(role="assistant", content=error_msg)
@@ -231,9 +178,9 @@ class ConversationAgent:
                 self.quiz_agent.create_quiz(quiz_data) 
                 
                 return True
-                
+
         except json.JSONDecodeError as e:
-            error_message = f"Erreur de décodage JSON: Le LLM n'a pas retourné un format valide. L'API a probablement dévié du JSON. Détails: {e}. Réponse brute reçue: {raw_response[:200]}..."
+            error_message = f"Erreur de décodage JSON: Le LLM n'a pas retourné un format valide. Détails: {e}. Réponse brute reçue: {raw_response[:200]}..."
             print(f"[LOG CONSOLE - QUIZ GENERATION ERROR] {error_message}")
             return error_message
         
@@ -242,11 +189,23 @@ class ConversationAgent:
             print(f"[LOG CONSOLE - QUIZ GENERATION ERROR] {error_message}")
             return error_message
 
-    def get_correction_for_final_review(self, question_data: dict, user_answer: str, model="llama3-70b-8192"):
+    def get_correction_for_final_review(
+            self, 
+            question_data: dict, 
+            user_answer: str, 
+            model="openai/gpt-oss-120b"
+        ):
         
         q_type = question_data['type']
         correct_identifier = question_data['correct_identifier']
         explanation = question_data['explanation']
+        
+        if not correct_identifier or not q_type:
+            return {
+                "score": 0, 
+                "feedback": f"❌ Le format de la question est brisé (Données manquantes).",
+                "error_details": question_data
+            }
         
         teacher_context = self.read_file(self.TEACHER_CONTEXT_PATH)
         
@@ -254,43 +213,41 @@ class ConversationAgent:
             score = 1 if user_answer.strip().upper() == correct_identifier.strip().upper() else 0
             
             if score == 1:
-                feedback = f"⭐ Maître Splinter : Félicitations ! Votre choix est exact. Vous avez le regard affûté."
+                feedback = f"⭐ Félicitations ! Votre choix est exact. Vous avez le regard affûté."
             else:
-                feedback = f"❌ Maître Splinter : C'est un pas dans l'ombre. La bonne réponse était '{correct_identifier}'. Méditez sur cette explication : {explanation}"
+                feedback = f"❌ C'est un pas dans l'ombre. La bonne réponse était '{correct_identifier}'. Méditez sur cette explication : {explanation}"
                 
             return {"score": score, "feedback": feedback}
-
         
         else:
             
             prompt_correction = f"""
-                TACHE : En tant que Maître Splinter, évalue la réponse de l'étudiant.
-                
-                Réponse attendue (Référence pour la notation) : '{correct_identifier}'
-                Réponse de l'étudiant : '{user_answer}'
-                
-                [Explication détaillée fournie si besoin : {explanation}]
-                
-                RÈGLE DE NOTATION :
-                1. Évalue l'exactitude CONCEPTUELLE de la réponse de l'étudiant par rapport à la réponse attendue.
-                2. Le score doit être soit 1 (CORRECT - réponse complète et précise), 0.5 (PARTIELLEMENT CORRECT - contient des éléments clés, mais incomplet ou vague), ou 0 (INCORRECT).
-                
-                RÈGLE DE NOTATION FORMELLE :
-                * Score 1: La réponse capture l'essence et les détails importants.
-                * Score 0.5: La réponse contient des éléments de vérité, mais manque de précision ou d'exhaustivité.
-                * Score 0: La réponse est incorrecte, hors sujet ou n'a pas réussi à identifier le concept principal.
-                
-                3. Le 'feedback' doit être formulé avec le ton sage et pédagogique de Maître Splinter.
-                
-                FORMAT DE SORTIE OBLIGATOIRE :
-                Retourne UNIQUEMENT l'objet JSON suivant sans aucun texte supplémentaire :
-                {{"score": (float, 0, 0.5, ou 1), "feedback": (string formulé par Maître Splinter)}}
-                """
+            TACHE : En tant que Maître Splinter, évalue la réponse de l'étudiant.
+            
+            Réponse attendue (Référence pour la notation) : '{correct_identifier}'
+            Réponse de l'étudiant : '{user_answer}'
+            
+            [Explication détaillée fournie si besoin : {explanation}]
+            
+            RÈGLE DE NOTATION (MODE TRÈS INDULGENT) :
+            1. L'objectif est la validation des acquis. Si la réponse touche à UN SEUL aspect correct du concept, elle doit être considérée comme VALIDE (Score 1).
+            2. Soyez extrêmement tolérant. Ne pénalisez pas le manque de précision ou l'oubli de détails si une partie de la réponse est juste.
+            
+            RÈGLE DE NOTATION FORMELLE :
+            * Score 1 (CORRECT) : La réponse mentionne au moins un élément pertinent, un mot-clé correct ou une idée liée à la réponse attendue, même si elle est incomplète ou vague.
+            * Score 0 (INCORRECT) : La réponse est un contresens total, parle d'un autre sujet, ou est vide.
+            
+            3. Le 'feedback' doit être formulé avec le ton sage et pédagogique de Maître Splinter. Si la réponse est validée mais incomplète, dites "Bien joué" et ajoutez simplement les détails manquants pour l'apprentissage.
+            
+            FORMAT DE SORTIE OBLIGATOIRE :
+            Retourne UNIQUEMENT l'objet JSON suivant sans aucun texte supplémentaire :
+            {{"score": (int, 0 ou 1), "feedback": (string formulé par Maître Splinter)}}
+            """
 
             messages_to_send = [
-                    {"role": "system", "content": teacher_context},
-                    {"role": "user", "content": prompt_correction} 
-                ]
+                {"role": "system", "content": teacher_context},
+                {"role": "user", "content": prompt_correction} 
+            ]
 
             try:
                 raw_response = self.client.chat.completions.create(
@@ -307,4 +264,3 @@ class ConversationAgent:
                 return {"score": 0, "feedback": f"❌ Maître Splinter : La concentration m'échappe. Le format de correction est rompu. Reprends ta pratique, jeune élève. (Détails: {raw_response[:50]}...)"}
             except Exception as e:
                 return {"score": 0, "feedback": f"❌ Maître Splinter : Une erreur API est survenue. Méditez sur la discipline du code. Détails: {e}"}
-

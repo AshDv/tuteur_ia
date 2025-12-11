@@ -100,8 +100,6 @@ class QuizAgent:
         self.set_state('finished')
 
     def delete_quiz(self):
-        """[RESET] Réinitialise les variables au lieu de les supprimer."""
-        # CORRECTION ICI : On réinitialise les valeurs par défaut au lieu de faire 'del'
         streamlit.session_state[self.quiz_data_key] = []
         streamlit.session_state[self.current_step_key] = 0
         streamlit.session_state[self.score_key] = 0
