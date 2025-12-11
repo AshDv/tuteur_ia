@@ -166,30 +166,37 @@ def render_chat_history(agent: ConversationAgent):
 def render_chat_input(agent: ConversationAgent):
     """Gère l'entrée utilisateur pour le mode conversationnel/vision."""
     
-    uploaded_image_file = st.session_state.get('img_uploader')
+    # Récupère la LISTE des fichiers (grâce à accept_multiple_files=True)
+    uploaded_images_list = st.session_state.get('img_uploader')
     
     if user_input := st.chat_input("Pose ta question ou demande un résumé à Splinter..."):
         
         context_text = st.session_state.course_text_content
         model_id = st.session_state.selected_model
-        image_url_full = None
         
-        if uploaded_image_file:
-            uploaded_image_file.seek(0)
-            
-            image_b64_raw = base64.b64encode(uploaded_image_file.read()).decode('utf-8')
-            mime_type = uploaded_image_file.type
-            
-            image_url_full = f"data:{mime_type};base64,{image_b64_raw}"
+        # Préparation des données images
+        images_data = []
+        
+        if uploaded_images_list:
+            # On boucle sur chaque fichier de la liste
+            for img_file in uploaded_images_list:
+                img_file.seek(0)
+                image_b64_raw = base64.b64encode(img_file.read()).decode('utf-8')
+                mime_type = img_file.type
+                
+                images_data.append({
+                    'b64': image_b64_raw,
+                    'mime': mime_type,
+                    'display_url': f"data:{mime_type};base64,{image_b64_raw}"
+                })
             
         with st.spinner("Splinter réfléchit..."):
             
-            if uploaded_image_file:
+            if images_data:
+                # On appelle la nouvelle version de la fonction qui accepte une liste
                 response = agent.ask_vision_model(
                     user_interaction=user_input,
-                    image_b64=image_b64_raw,
-                    mime_type=mime_type,
-                    image_url_for_display=image_url_full,
+                    images_data=images_data, # On passe la liste complète
                     model=VISION_MODEL
                 )
             else:
@@ -199,6 +206,7 @@ def render_chat_input(agent: ConversationAgent):
                     context_text=context_text
                 )
         
+        # Nettoyage après envoi (optionnel, selon si vous voulez garder les images pour la question suivante)
         if 'img_uploader' in st.session_state:
             del st.session_state['img_uploader']
             

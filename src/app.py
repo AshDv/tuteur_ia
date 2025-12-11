@@ -134,24 +134,35 @@ class ConversationAgent:
             self.update_history(role="assistant", content=error_msg)
             return error_msg
 
-    def ask_vision_model(self, user_interaction, image_b64, mime_type, image_url_for_display, model):
+    def ask_vision_model(self, user_interaction, images_data, model):
+        """
+        Gère la vision avec plusieurs images.
+        images_data : Liste de dictionnaires {'b64': str, 'mime': str, 'display_url': str}
+        """
 
-        multimodal_content_api = [
-            {"type": "text", "text": user_interaction},
-            {
+        # 1. On crée le bloc de texte
+        multimodal_content_api = [{"type": "text", "text": user_interaction}]
+
+        # 2. On ajoute chaque image au message API
+        for img in images_data:
+            multimodal_content_api.append({
                 "type": "image_url",
                 "image_url": {
-                    "url": f"data:{mime_type};base64,{image_b64}",
+                    "url": f"data:{img['mime']};base64,{img['b64']}",
                 },
-            },
-        ]
+            })
 
+        # 3. Mise à jour de l'historique local (pour l'affichage)
+        # On stocke la première image comme "aperçu" principal ou on gère différemment l'affichage
+        first_display_url = images_data[0]['display_url'] if images_data else None
+        
         self.update_history(
             role="user", 
             content=user_interaction,
-            image_url=image_url_for_display
+            image_url=first_display_url 
         )
         
+        # 4. Préparation de l'envoi API
         messages_to_send = self.get_cleaned_api_history(
             include_multimodal_content=True,
             current_multimodal_content=multimodal_content_api
