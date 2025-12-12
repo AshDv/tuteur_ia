@@ -135,26 +135,23 @@ class ConversationAgent:
             Tu es un professeur expert. Sujet : "{topic}". Niveau : {difficulty}.
             Objectif : Générer EXACTEMENT {n_questions} questions.
             {context_instruction}
-            ---
-
-            INSTRUCTIONS DE GÉNÉRATION :
-            1.  Crée EXACTEMENT {n_questions} questions.
-            2.  Assure une VARIÉTÉ dans les types de questions ('open' pour les concepts détaillés, 'qcm' pour la mémorisation).
-            3.  Chaque question doit être indépendante du contexte d'une autre.
-            4.  La clé "explanation" doit contenir l'explication complète et pédagogique de la solution, même pour les questions ouvertes.
-            5.  La langue utilisé pour les question et réponses doit UNIQUEMENT être du français.
+            INSTRUCTIONS :
+            utilise UNIQUEMENT le français pour les question
+            Génère {n_questions} questions variées ('open' et 'qcm').
+            Si le texte est court, interroge sur des détails précis.
             
-            FORMAT IMPÉRATIF :
-            Réponds UNIQUEMENT avec un tableau JSON (liste Python) respectant le schéma suivant et les contraintes de clés fournies dans le prompt système.
-
-            POUR CHAQUE QUESTION 'qcm' :
-            -   "type": "qcm"
-            -   "choices": Une liste de 4 options (A, B, C, D)
-            -   "correct_identifier": La lettre majuscule correcte (A, B, C ou D)
-
-            POUR CHAQUE QUESTION 'open' :
-            -   "type": "open"
-            -   "correct_identifier": La réponse détaillée et complète attendue pour la correction.
+            Réponds UNIQUEMENT avec un tableau JSON valide (liste d'objets) respectant le schéma imposé dans le prompt système. 
+            
+            Exemple de format JSON STRICTEMENT requis pour la clé "questions" du tableau :
+            [
+                {{
+                    "type": "qcm",
+                    "question": "L'énoncé ?",
+                    "explanation": "Pourquoi c'est juste",
+                    "correct_identifier": "A",
+                    "choices": ["A. Option 1", "B. Option 2", "C. Option 3", "D. Option 4"]
+                }}
+            ]
             """
         
         try:
