@@ -173,8 +173,8 @@ def render_chat_history(conversation_agent: ConversationAgent):
             with streamlit.chat_message(message["role"]):
                 streamlit.markdown(message["content"])
                 
-                if "image_url" in message and message["image_url"]:
-                    streamlit.image(message["image_url"], width=300) 
+                # Le bloc d'affichage d'image a été supprimé ici pour alléger le chat.
+                # L'image reste visible dans la sidebar lors de l'upload.
 
 def render_chat_input(conversation_agent: ConversationAgent):
     """Gère l'entrée utilisateur pour le mode conversationnel/vision."""
