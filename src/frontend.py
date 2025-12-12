@@ -4,25 +4,29 @@ import base64
 import streamlit as streamlit
 from app import ConversationAgent
 from quiz_agent import QuizAgent
-from utils import DocumentProcessor
+# On importe le nouveau processeur YouTube
+from utils import DocumentProcessor, YouTubeProcessor
 
+# Configuration du chemin pour les imports locaux si nécessaire
 current_dir = os.path.dirname(__file__)
 project_root = os.path.abspath(os.path.join(current_dir, '..'))
-
 if project_root not in sys.path:
     sys.path.append(project_root)
 
 from resources.config import LLM_MODELS
 
+# Initialisation des clés de session globales
 if "uploader_key" not in streamlit.session_state:
     streamlit.session_state.uploader_key = 0
 
 if "selected_model" not in streamlit.session_state:
     streamlit.session_state.selected_model = LLM_MODELS[0]
+
+# Modèle dédié à la vision (Llama 4 Scout)
 VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 def initialize_session():
-    
+    """Initialise les objets principaux de l'application."""
     if "quiz_manager" not in streamlit.session_state:
         streamlit.session_state.quiz_manager = QuizAgent()
     
@@ -37,7 +41,7 @@ def initialize_session():
         streamlit.session_state.image_base64_url = None
 
 def render_start_interface(conversation_agent: ConversationAgent, quiz_manager: QuizAgent):
-    
+    """Affiche le menu de configuration du quiz."""
     streamlit.header("Démarrez un cycle de révision.")
     
     default_topic = "le cours ci-joint" if streamlit.session_state.course_text_content else "un sujet libre"
@@ -61,7 +65,6 @@ def render_start_interface(conversation_agent: ConversationAgent, quiz_manager: 
         difficulty = streamlit.selectbox("Niveau", ["Débutant", "Moyen", "Expert"])
     
     if streamlit.button("🚀 Générer l'évaluation") and topic:
-        
         streamlit.session_state['topic'] = topic
         streamlit.session_state['num_questions'] = num_questions
         streamlit.session_state['difficulty'] = difficulty
@@ -69,10 +72,8 @@ def render_start_interface(conversation_agent: ConversationAgent, quiz_manager: 
         quiz_manager.set_state('generating')
         streamlit.rerun()
 
-
 def render_questioning_interface(conversation_agent: ConversationAgent, quiz_manager: QuizAgent):
     """Affiche la question en cours et le formulaire de réponse."""
-    
     q_data = quiz_manager.read_current_question()
     q_index = quiz_manager.read_quiz_length() - (quiz_manager.read_quiz_length() - quiz_manager.read_current_question_index())
     
@@ -82,7 +83,6 @@ def render_questioning_interface(conversation_agent: ConversationAgent, quiz_man
     user_answer = ""
     
     with streamlit.form("current_question_form", clear_on_submit=True):
-        
         if q_data['type'] == 'qcm':
             choices_with_letters = q_data['choices']          
             user_choice_with_letter = streamlit.radio(
@@ -92,12 +92,11 @@ def render_questioning_interface(conversation_agent: ConversationAgent, quiz_man
                 key='qcm_answer'
             )
             if user_choice_with_letter:
-                user_answer = user_choice_with_letter[0] 
-                
+                user_answer = user_choice_with_letter[0] # On garde juste la lettre pour l'instant
+                # Note: La logique de correction récupérera le texte complet plus tard.
         else:
             user_answer = streamlit.text_area("Ta réponse rédigée :", key='open_answer')
             
-        
         if streamlit.form_submit_button("Soumettre la Réponse et Passer à la Suivante"):
             if not user_answer:
                 streamlit.warning("Veuillez saisir ou choisir une réponse, Sensei n'aime pas le vide.")
@@ -107,12 +106,11 @@ def render_questioning_interface(conversation_agent: ConversationAgent, quiz_man
             streamlit.rerun()
 
 def render_final_review_interface(conversation_agent: ConversationAgent, quiz_manager: QuizAgent):
-    """Déclenche la correction finale par le LLM et passe à l'affichage des résultats."""
-    
+    """Déclenche la correction finale par le LLM."""
     model_id = streamlit.session_state.selected_model
     
     streamlit.header("Correction en Cours...")
-    streamlit.info("Maître Splinter évalue la qualité de votre pratique. Cela peut prendre quelques instants pour les questions ouvertes.")
+    streamlit.info("Maître Splinter évalue la qualité de votre pratique...")
     
     with streamlit.spinner("Évaluation finale par le tuteur IA..."):
         quiz_manager.finalize_quiz_results(conversation_agent, model=model_id)
@@ -120,7 +118,7 @@ def render_final_review_interface(conversation_agent: ConversationAgent, quiz_ma
     streamlit.rerun()
 
 def render_finished_interface(quiz_manager: QuizAgent):
-    
+    """Affiche les résultats finaux avec une mise en page épurée."""
     total = quiz_manager.read_quiz_length()
     score = quiz_manager.read_score()
     
@@ -144,11 +142,11 @@ def render_finished_interface(quiz_manager: QuizAgent):
         
         status_icon = "✅" if correction['score'] == 1 else "❌"
         
-        # Utilisation d'un expander pour rendre l'interface plus compacte et propre
+        # Utilisation d'un expander pour rendre l'interface plus compacte
         with streamlit.expander(f"{status_icon} Question {i+1}", expanded=True):
             streamlit.markdown(f"**Question :** {q_data['question']}")
             
-            # Si c'est un QCM et qu'on a juste la lettre (ex: "A"), on essaie de retrouver le texte entier
+            # Si c'est un QCM et qu'on a juste la lettre, on retrouve le texte entier
             if q_data['type'] == 'qcm' and len(user_choice_text) == 1:
                 for choice in q_data.get('choices', []):
                     if choice.startswith(user_choice_text):
@@ -157,29 +155,25 @@ def render_finished_interface(quiz_manager: QuizAgent):
             
             streamlit.info(f"**Votre réponse :** {user_choice_text}")
             
-            # Affichage du feedback direct (qui contient maintenant la réponse complète)
+            # Affichage du feedback direct
             streamlit.write(correction['feedback'])
             
-            # Note : On a retiré le streamlit.caption qui faisait doublon
-
     if streamlit.button("🥋 Recommencer l'Entraînement"):
         quiz_manager.delete_quiz()
         streamlit.rerun()
 
 def render_chat_history(conversation_agent: ConversationAgent):
-    
+    """Affiche l'historique du chat (sans réafficher les images pour ne pas polluer)."""
     for message in conversation_agent.history:
         if message["role"] != "system":
             with streamlit.chat_message(message["role"]):
                 streamlit.markdown(message["content"])
-                
-                # Le bloc d'affichage d'image a été supprimé ici pour alléger le chat.
-                # L'image reste visible dans la sidebar lors de l'upload.
+                # Nous n'affichons plus l'image ici car elle est déjà visible dans la sidebar
 
 def render_chat_input(conversation_agent: ConversationAgent):
     """Gère l'entrée utilisateur pour le mode conversationnel/vision."""
     
-    # Récupère la LISTE des fichiers (grâce à accept_multiple_files=True)
+    # Récupère la LISTE des fichiers
     uploaded_images_list = streamlit.session_state.get('img_uploader')
     
     if user_input := streamlit.chat_input("Pose ta question ou demande un résumé à Splinter..."):
@@ -191,7 +185,6 @@ def render_chat_input(conversation_agent: ConversationAgent):
         images_data = []
         
         if uploaded_images_list:
-            # On boucle sur chaque fichier de la liste
             for img_file in uploaded_images_list:
                 img_file.seek(0)
                 image_b64_raw = base64.b64encode(img_file.read()).decode('utf-8')
@@ -206,10 +199,9 @@ def render_chat_input(conversation_agent: ConversationAgent):
         with streamlit.spinner("Splinter réfléchit..."):
             
             if images_data:
-                # On appelle la nouvelle version de la fonction qui accepte une liste
                 response = conversation_agent.ask_vision_model(
                     user_interaction=user_input,
-                    images_data=images_data, # On passe la liste complète
+                    images_data=images_data,
                     model=VISION_MODEL
                 )
             else:
@@ -219,6 +211,7 @@ def render_chat_input(conversation_agent: ConversationAgent):
                     context_text=context_text
                 )
         
+        # Nettoyage optionnel après envoi
         if 'img_uploader' in streamlit.session_state:
             del streamlit.session_state['img_uploader']
             
@@ -234,9 +227,11 @@ def run_app():
     quiz_manager = streamlit.session_state.quiz_manager
     current_state = quiz_manager.read_state()
     
+    # --- BARRE LATÉRALE (SIDEBAR) ---
     with streamlit.sidebar:
         streamlit.title("📚 Outils d'Entraînement")
         
+        # 1. GESTION PDF
         uploaded_pdf_list = streamlit.file_uploader(
             "Fichiers PDF (Cours - Max. 5)", 
             type="pdf", 
@@ -244,36 +239,61 @@ def run_app():
             accept_multiple_files=True,
         )
         
+        # Traitement PDF
         if uploaded_pdf_list:
-            
             uploaded_pdf_list = uploaded_pdf_list[:5]
-            
-            streamlit.session_state.course_text_content = ""
+            pdf_context = ""
+            total_chars = 0
             
             with streamlit.spinner(f"Analyse de {len(uploaded_pdf_list)} documents..."):
-                
-                all_text_with_names = []
-                total_chars = 0
-                
                 for pdf_file in uploaded_pdf_list:
                     text = DocumentProcessor.extract_text_from_pdf(pdf_file)
-                    
-                    separator_and_text = f"\n--- Fichier : {pdf_file.name} ---\n{text}"
-                    all_text_with_names.append(separator_and_text)
+                    pdf_context += f"\n--- Fichier PDF : {pdf_file.name} ---\n{text}"
                     total_chars += len(text)
                 
-                streamlit.session_state.course_text_content = "\n".join(all_text_with_names)
-                
-                streamlit.success(f"{len(uploaded_pdf_list)} PDF(s) chargés en mémoire !")
-                streamlit.caption(f"Total : {total_chars} caractères.")
-        
-        elif 'course_text_content' in streamlit.session_state:
-            streamlit.session_state.course_text_content = ""
-        
+                streamlit.session_state['temp_pdf_context'] = pdf_context
+                streamlit.success(f"{len(uploaded_pdf_list)} PDF(s) chargés !")
+        else:
+             streamlit.session_state['temp_pdf_context'] = ""
+
         streamlit.divider()
 
+        # 2. GESTION YOUTUBE
+        streamlit.markdown("### 📺 Vidéo YouTube")
+        youtube_url = streamlit.text_input("Collez un lien vidéo ici :", placeholder="https://youtube.com/...")
+        
+        if youtube_url:
+            video_id = YouTubeProcessor.extract_video_id(youtube_url)
+            if video_id:
+                streamlit.image(f"https://img.youtube.com/vi/{video_id}/0.jpg", use_container_width=True)
+                
+                if streamlit.button("Extraire & Analyser la Vidéo"):
+                    with streamlit.spinner("Récupération des sous-titres..."):
+                        transcript = YouTubeProcessor.get_transcript_text(video_id)
+                        
+                        if transcript:
+                            formatted_transcript = f"\n--- TRANSCRIPTION YOUTUBE ({youtube_url}) ---\n{transcript}"
+                            streamlit.session_state['temp_youtube_context'] = formatted_transcript
+                            streamlit.success("Vidéo analysée avec succès !")
+            else:
+                streamlit.caption("Lien invalide.")
+        else:
+            streamlit.session_state['temp_youtube_context'] = ""
+
+        # CONSOLIDATION DU CONTEXTE (PDF + YouTube)
+        pdf_c = streamlit.session_state.get('temp_pdf_context', "")
+        yt_c = streamlit.session_state.get('temp_youtube_context', "")
+        
+        if pdf_c or yt_c:
+            streamlit.session_state.course_text_content = pdf_c + "\n" + yt_c
+        else:
+            streamlit.session_state.course_text_content = ""
+
+        streamlit.divider()
+
+        # 3. GESTION IMAGES
         uploaded_image_list = streamlit.file_uploader(
-            "Schémas/Graphiques (pour analyse vision - Max. 5)", 
+            "Schémas/Graphiques (Vision - Max. 5)", 
             type=["png", "jpg", "jpeg"], 
             key="img_uploader",
             accept_multiple_files=True,
@@ -281,32 +301,27 @@ def run_app():
         
         streamlit.session_state.image_base64_url = []
         if uploaded_image_list:
-            
             if len(uploaded_image_list) > 5:
                 streamlit.warning("Seuls les 5 premières images seront traitées.")
                 uploaded_image_list = uploaded_image_list[:5]
                 
             for img_file in uploaded_image_list:
-                base64_url = DocumentProcessor.convert_image_to_base64(img_file)
-                if base64_url:
-                    streamlit.session_state.image_base64_url.append(base64_url)
-                    streamlit.image(img_file, width=150) # Affichage de l'aperçu dans la sidebar
-            
-            if streamlit.session_state.image_base64_url:
-                streamlit.success(f"{len(streamlit.session_state.image_base64_url)} image(s) prête(s) !")
-
+                # Affichage aperçu
+                streamlit.image(img_file, caption=img_file.name, width=150)
+                # Conversion interne (pour utilisation ultérieure si besoin hors du chat)
+                # Note: Le chat input récupère directement via st.session_state['img_uploader']
     
+    # --- ZONE PRINCIPALE ---
     streamlit.title("🐭 Maître Splinter - Tuteur IA")
     
+    # Onglets
     if current_state in ['start', 'questioning', 'final_review', 'finished']:
         tab_chat, tab_quiz = streamlit.tabs(["💬 Discussion & Vision", "📝 Quiz Dynamique"])
     else:
         tab_chat, tab_quiz = streamlit.tabs(["💬 Discussion & Vision", "📝 Quiz Dynamique"])
         
-    
     with tab_chat:
         streamlit.header("Discours & Sagesse du Maître")
-        
         streamlit.session_state.selected_model = streamlit.selectbox(
             "Modèle de Conversation", 
             options=LLM_MODELS,
@@ -321,9 +336,7 @@ def run_app():
         elif current_state != 'start':
             streamlit.warning("Veuillez compléter ou annuler le quiz avant de commencer une nouvelle discussion.")
 
-
     with tab_quiz:
-        
         if current_state == 'start':
             render_start_interface(agent, quiz_manager)
 
@@ -334,6 +347,7 @@ def run_app():
                 num_questions = streamlit.session_state.get('num_questions', 3)
                 context_text = streamlit.session_state.course_text_content
                 difficulty = streamlit.session_state.get('difficulty', 'Moyen')
+                
                 success = streamlit.session_state.conversation_agent.generate_quiz(
                     topic=topic_input, 
                     n_questions=num_questions, 
@@ -343,7 +357,7 @@ def run_app():
                 )
                 
                 if not success:
-                    streamlit.error("❌ Échec de la génération du quiz. Vérifiez le sujet ou le format JSON.")
+                    streamlit.error("❌ Échec de la génération du quiz. Vérifiez le sujet.")
                     quiz_manager.set_state('start')
                     
                 streamlit.rerun()
@@ -356,7 +370,6 @@ def run_app():
 
         elif current_state == 'finished':
             render_finished_interface(quiz_manager)
-
 
 if __name__ == "__main__":
     run_app()

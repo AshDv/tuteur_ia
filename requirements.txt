@@ -2,3 +2,4 @@ groq
 python-dotenv
 streamlit
 PyPDF2
+youtube-transcript-api
