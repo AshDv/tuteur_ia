@@ -125,26 +125,42 @@ def render_finished_interface(quiz_manager: QuizAgent):
     score = quiz_manager.read_score()
     
     streamlit.header("🔥 Fin de l'Évaluation 🔥")
-    streamlit.success(f"### 🏆 Score Final : {score} / {total}")
+    
+    # Feedback visuel sur le score global
+    if score / total >= 0.7:
+        streamlit.success(f"### 🏆 Excellent travail : {score} / {total}")
+    elif score / total >= 0.5:
+        streamlit.warning(f"### 👍 Bon début : {score} / {total}")
+    else:
+        streamlit.error(f"### 📚 Il faut réviser : {score} / {total}")
     
     streamlit.markdown("---")
-    streamlit.subheader("Correction Détaillée de Maître Splinter :")
+    streamlit.subheader("Correction Détaillée")
     
     for i, result in enumerate(quiz_manager.read_results()):
         q_data = result['question_data']
         correction = result['correction']
+        user_choice_text = result['user_answer']
         
         status_icon = "✅" if correction['score'] == 1 else "❌"
-        streamlit.markdown(f"#### {status_icon} Question {i+1}: {q_data['question']}")
         
-        streamlit.markdown(f"**Votre réponse :** *{result['user_answer']}*")
-        
-        streamlit.info(f"**Feedback du Sensei :** {correction['feedback']}")
-
-        if q_data['type'] == 'qcm':
-            streamlit.caption(f"Réponse attendue : {q_data['correct_identifier']}")
+        # Utilisation d'un expander pour rendre l'interface plus compacte et propre
+        with streamlit.expander(f"{status_icon} Question {i+1}", expanded=True):
+            streamlit.markdown(f"**Question :** {q_data['question']}")
             
-        streamlit.write("---")
+            # Si c'est un QCM et qu'on a juste la lettre (ex: "A"), on essaie de retrouver le texte entier
+            if q_data['type'] == 'qcm' and len(user_choice_text) == 1:
+                for choice in q_data.get('choices', []):
+                    if choice.startswith(user_choice_text):
+                        user_choice_text = choice
+                        break
+            
+            streamlit.info(f"**Votre réponse :** {user_choice_text}")
+            
+            # Affichage du feedback direct (qui contient maintenant la réponse complète)
+            streamlit.write(correction['feedback'])
+            
+            # Note : On a retiré le streamlit.caption qui faisait doublon
 
     if streamlit.button("🥋 Recommencer l'Entraînement"):
         quiz_manager.delete_quiz()

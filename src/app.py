@@ -210,38 +210,46 @@ class ConversationAgent:
         teacher_context = self.read_file(self.TEACHER_CONTEXT_PATH)
         
         if q_type == 'qcm':
+            # --- LOGIQUE AMÉLIORÉE : Récupération du texte complet ---
+            choices = question_data.get('choices', [])
+            full_correct_answer = correct_identifier # Valeur par défaut (la lettre)
+            
+            # On cherche l'option qui commence par la bonne lettre (ex: "A.")
+            if choices:
+                for choice in choices:
+                    if choice.strip().upper().startswith(correct_identifier.strip().upper()):
+                        full_correct_answer = choice
+                        break
+            
+            # Calcul du score
             score = 1 if user_answer.strip().upper() == correct_identifier.strip().upper() else 0
             
+            # Construction du feedback clair et complet
             if score == 1:
-                feedback = f"⭐ Félicitations ! Votre choix est exact. Vous avez le regard affûté."
+                feedback = f"✅ **Correct !**\n\nVous avez bien identifié la réponse : **{full_correct_answer}**.\n\n💡 *{explanation}*"
             else:
-                feedback = f"❌ C'est un pas dans l'ombre. La bonne réponse était '{correct_identifier}'. Méditez sur cette explication : {explanation}"
+                feedback = f"❌ **Incorrect.**\n\nLa bonne réponse est : **{full_correct_answer}**.\n\n💡 **Explication :** {explanation}"
                 
             return {"score": score, "feedback": feedback}
         
         else:
-            
+            # Pour les questions ouvertes, on garde la logique LLM mais on force un format direct
             prompt_correction = f"""
-            TACHE : En tant que Maître Splinter, évalue la réponse de l'étudiant.
+            TACHE : Corrige cette réponse d'étudiant de manière DIRECTE et CONCISE.
             
-            Réponse attendue (Référence pour la notation) : '{correct_identifier}'
+            Question : {question_data.get('question')}
+            Réponse attendue : '{correct_identifier}'
             Réponse de l'étudiant : '{user_answer}'
+            Explication contextuelle : {explanation}
             
-            [Explication détaillée fournie si besoin : {explanation}]
+            RÈGLES :
+            1. Si la réponse est juste (sens globalement identique), mets score 1. Sinon 0.
+            2. Ton feedback doit commencer directement par "Correct" ou "Incorrect".
+            3. Donne ensuite la bonne réponse CLAIREMENT sans fioritures.
+            4. Finis par une explication simple.
             
-            RÈGLE DE NOTATION (MODE TRÈS INDULGENT) :
-            1. L'objectif est la validation des acquis. Si la réponse touche à UN SEUL aspect correct du concept, elle doit être considérée comme VALIDE (Score 1).
-            2. Soyez extrêmement tolérant. Ne pénalisez pas le manque de précision ou l'oubli de détails si une partie de la réponse est juste.
-            
-            RÈGLE DE NOTATION FORMELLE :
-            * Score 1 (CORRECT) : La réponse mentionne au moins un élément pertinent, un mot-clé correct ou une idée liée à la réponse attendue, même si elle est incomplète ou vague.
-            * Score 0 (INCORRECT) : La réponse est un contresens total, parle d'un autre sujet, ou est vide.
-            
-            3. Le 'feedback' doit être formulé avec le ton sage et pédagogique de Maître Splinter. Si la réponse est validée mais incomplète, dites "Bien joué" et ajoutez simplement les détails manquants pour l'apprentissage.
-            
-            FORMAT DE SORTIE OBLIGATOIRE :
-            Retourne UNIQUEMENT l'objet JSON suivant sans aucun texte supplémentaire :
-            {{"score": (int, 0 ou 1), "feedback": (string formulé par Maître Splinter)}}
+            FORMAT DE SORTIE OBLIGATOIRE (JSON pur) :
+            {{"score": (int, 0 ou 1), "feedback": (string)}}
             """
 
             messages_to_send = [
@@ -261,6 +269,6 @@ class ConversationAgent:
                 return json.loads(raw_response)
             
             except json.JSONDecodeError as e:
-                return {"score": 0, "feedback": f"❌ Maître Splinter : La concentration m'échappe. Le format de correction est rompu. Reprends ta pratique, jeune élève. (Détails: {raw_response[:50]}...)"}
+                return {"score": 0, "feedback": f"❌ Erreur de formatage de la correction. (Détails: {raw_response[:50]}...)"}
             except Exception as e:
-                return {"score": 0, "feedback": f"❌ Maître Splinter : Une erreur API est survenue. Méditez sur la discipline du code. Détails: {e}"}
+                return {"score": 0, "feedback": f"❌ Erreur API pendant la correction. Détails: {e}"}
